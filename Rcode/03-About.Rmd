@@ -1,0 +1,22 @@
+
+# About this project
+
+## Current version {-}
+
+Version: 1.0.1
+
+Release Date: 2023-11-14
+
+## Session Information {-}
+
+``` {r eval = TRUE}
+
+# Show session information
+sessionInfo()
+
+```
+
+
+
+
+

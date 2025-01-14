@@ -1,0 +1,206 @@
+
+# scRNA-seq
+
+## Load packages
+
+``` {r eval = FALSE}
+
+suppressMessages({
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(gplots)
+library(matrixStats)
+library(sva)
+library(ggpubr)
+library(openxlsx)
+library(stringr)
+library(ggthemes)
+library(destiny)
+library(grDevices)
+library(reticulate)
+library(L1Graph)
+library(Biobase)
+library(scatterplot3d)
+library(monocle)
+library(pheatmap)
+library(harmony)
+library(SingleR)
+library(dplyr)
+library(clusterProfiler)
+library(colorRamps)
+library(RColorBrewer)
+})
+
+color.lib <- c("#A6761D", "#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", 
+               "#E31A1C", "#FDBF6F", "#FF7F00", "#CAB2D6", "#6A3D9A", "#F4B3BE",
+               "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", 
+               "#F4A11D", "#8DC8ED", "#4C6CB0", "#8A1C1B", "#CBCC2B", "#EA644C",
+               "#634795", "#005B1D", "#26418A", "#CB8A93", "#F1E404", "#E22826",
+               "#50C1FF", "#F4D31D", "#F4A11D", "#82C800", "#8B5900", "#858ED1",
+               "#FF72E1", "#CB50B2", "#007D9B", "#26418A", "#8B495F", "#FF394B")
+
+```
+
+
+## Analysis of scRNA-seq data
+
+``` {r eval = FALSE}
+
+out.path <- "out.path"
+
+pdf(paste0(out.path, "/2.filter.vlnplot.pdf"), width = 12, height = 7)
+VlnPlot(p53, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+dev.off()
+
+pdf(paste0(out.path, "/2.filter.geneplot.pdf"), width = 12, height = 7)
+plot1 <- FeatureScatter(p53, feature1 = "nCount_RNA", group.by = "Sample", feature2 = "percent.mt")
+plot2 <- FeatureScatter(p53, feature1 = "nCount_RNA", group.by = "Sample", feature2 = "nFeature_RNA")
+plot1 + plot2
+dev.off()
+
+p53 <- NormalizeData(p53, normalization.method = "LogNormalize", scale.factor = 10000)
+p53 <- FindVariableFeatures(p53, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(p53), 10)
+
+# plot variable features with and without labels
+pdf(paste0(out.path, "/3.VariableFeaturePlot.pdf"), width = 12, height = 7)
+plot1 <- VariableFeaturePlot(p53)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+dev.off()
+
+all.genes <- rownames(p53)
+p53 <- ScaleData(p53, features = VariableFeatures(object = p53))
+p53 <- RunPCA(p53, features = VariableFeatures(object = p53))
+
+p <- DimPlot(p53, reduction = "pca", group.by = "Sample") + theme_few()
+ggsave(paste0(out.path, "/4.PCA.pdf"), p, width = 9, height = 7)
+
+
+p53 <- RunHarmony(p53, "Batch", max.iter.harmony = 3, sigma = 0.1, max.iter.cluster = 10)
+p53 <- FindNeighbors(p53, reduction = "harmony", dims = 1:20)
+p53 <- FindClusters(p53, resolution = 0.8)
+p53 <- RunTSNE(p53, reduction = "harmony", dims = 1:20, perplexity = 50)
+p53 <- RunUMAP(p53, reduction = "harmony", dims = 1:20)
+
+table(Idents(p53))
+
+```
+
+
+## Visualization of scRNA-seq data
+
+``` {r eval = FALSE}
+
+p <- DimPlot(p53, reduction = "umap", pt.size = 0.5, group.by = "clusters",
+             cols = color.lib) + theme_few()
+ggsave(paste0(out.path, "/5.UMAP.cluster.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "umap", pt.size = 0.5, label = TRUE, label.size = 10,
+             group.by = "clusters", cols = color.lib) + theme_few()
+ggsave(paste0(out.path, "/5.UMAP.cluster.label.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "umap", pt.size = 0.5,
+             group.by = "Sample", cols = color.sample) + theme_few()
+ggsave(paste0(out.path, "/5.UMAP.sample.pdf"), p, width = 8.5, height = 7)
+
+p <- DimPlot(p53, reduction = "umap", pt.size = 0.5,
+             group.by = "CellType", cols = color.cell) + theme_few()
+ggsave(paste0(out.path, "/5.UMAP.cell.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "umap", pt.size = 0.5,
+             group.by = "CellType", split.by = "Sample", ncol = 2, cols = color.cell) + theme_few()
+ggsave(paste0(out.path, "/5.UMAP.cell.SplitSample.pdf"), p, width = 12, height = 10)
+
+
+p <- DimPlot(p53, reduction = "tsne", pt.size = 0.5, group.by = "clusters",
+             cols = color.lib) + theme_few()
+ggsave(paste0(out.path, "/6.tSNE.cluster.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "tsne", pt.size = 0.5, label = TRUE, label.size = 10, group.by = "clusters",
+             cols = color.lib) + theme_few()
+ggsave(paste0(out.path, "/6.tSNE.cluster.label.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "tsne", pt.size = 0.5, 
+             group.by = "Sample", cols = color.sample) + theme_few()
+ggsave(paste0(out.path, "/6.tSNE.sample.pdf"), p, width = 8, height = 7)
+
+p <- DimPlot(p53, reduction = "tsne", pt.size = 0.5,
+             group.by = "CellType", cols = color.cell) + theme_few()
+ggsave(paste0(out.path, "/6.tSNE.cell.pdf"), p, width = 9, height = 7)
+
+p <- DimPlot(p53, reduction = "tsne", pt.size = 0.5,
+             group.by = "CellType", split.by = "Sample", ncol = 2, cols = color.cell) + theme_few()
+ggsave(paste0(out.path, "/6.tSNE.cell.SplitSample.pdf"), p, width = 12, height = 10)
+
+
+```
+
+## Markers identification
+
+``` {r eval = FALSE}
+
+Idents(p53) <- p53$CellType
+all.markers <- FindAllMarkers(p53, only.pos = TRUE)
+all.markers <- all.markers[which(all.markers$p_val_adj < 0.05), ]
+write.xlsx(all.markers, paste0(out.path, "/1.topMarkers.CellType.xlsx"), rowNames = T, overwrite = T)
+
+
+all.markers <- read.xlsx(paste0(out.path, "/1.topMarkers.CellType.xlsx"), rowNames = T)
+top10 <- all.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+gene.list <- unique(top10$gene)
+p <- DotPlot(p53, features = rev(gene.list), group.by = "CellType", dot.scale = 8, cols = c("#DDDDDD", "#003366" ), col.min = -1) + RotatedAxis()
+p <- p + theme_base() + theme(axis.text.x = element_text(angle = 90,hjust = 1,vjust = 0.5, size=20))
+p <- p + theme(axis.text.y = element_text(size = 10))
+p <- p + coord_flip() + scale_size(range = c(0, 6))
+p <- p + gradient_color(c("#EEEEEE","#ffb459","#e8613c","#b70909"))
+ggsave(paste0(out.path, "/Top.markers.CellType.pdf"), p, width = 8, height = 13)
+
+
+```
+
+## CellPhoneDB analysis
+
+``` {r eval = FALSE}
+
+########### cellphonedb
+out.path.ccc <- paste0(out.path, "/ccc_all_state")
+system(sprintf("mkdir %s", out.path.ccc))
+
+gene.id <- read.table("/public/home/daiyt/reference/human/hg38/gencode/gene.id.v40.txt")
+gene.id.coding <- gene.id[which(gene.id$V6 == "protein_coding"), ]
+
+
+out.data <- p53@assays$RNA@data[, which(!is.na(p53$CellTypeAnno))]
+out.data <- out.data[rowSums(out.data) > 0, ]
+out.data <- out.data[rownames(out.data) %in% gene.id.coding$V7, ]
+
+out.data <- as.data.frame(out.data)
+out.data <- round(out.data, 5)
+out.ccc.mat <- data.frame(Gene = rownames(out.data), out.data)
+
+
+
+out.meta <- p53@meta.data[colnames(out.data), c("CellType","CellTypeAnno")]
+colnames(out.meta) <- c("Cell", "cell_type")
+out.meta$Cell = rownames(out.meta)
+out.meta$Cell <- str_replace_all(out.meta$Cell, "-", ".")
+
+
+sum(out.meta$Cell != colnames(out.ccc.mat)[2:ncol(out.ccc.mat)])
+
+write.table(out.ccc.mat, paste0(out.path.ccc, "/exp.mat.txt"), row.names = F, col.names = T, sep = "\t", quote = F)
+write.table(out.meta, paste0(out.path.ccc, "/meta.data.txt"), row.names = F, col.names = T, sep = "\t", quote = F)
+
+'
+cellphonedb method statistical_analysis meta.data.txt exp.mat.txt --threads=20 --iterations=100 --counts-data=gene_name --output-path=out.merge_tumor_T
+
+
+'
+
+
+
+```
